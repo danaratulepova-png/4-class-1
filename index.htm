@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Видео в презентации</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<style>
+body{
+  font-family: 'Comic Sans MS', cursive;
+  background: linear-gradient(135deg,#74ebd5,#acb6e5);
+  padding:20px;
+}
+
+.container{
+  background:white;
+  padding:25px;
+  border-radius:20px;
+  max-width:750px;
+  margin:auto;
+  box-shadow:0 10px 25px rgba(0,0,0,0.2);
+}
+
+h2{ text-align:center; color:#4a4a4a; }
+
+button{
+  background:#ff7eb3;
+  border:none;
+  padding:10px 20px;
+  border-radius:15px;
+  color:white;
+  font-size:16px;
+  cursor:pointer;
+  transition:0.3s;
+}
+button:hover{ background:#ff4f91; transform:scale(1.05); }
+
+input{
+  padding:8px;
+  border-radius:10px;
+  border:1px solid #ccc;
+}
+
+.hidden{ display:none; }
+
+.question{
+  background:#f9f9ff;
+  padding:15px;
+  border-radius:15px;
+  margin-bottom:15px;
+}
+
+img.icon{
+  width:60px;
+  display:block;
+  margin-bottom:10px;
+}
+
+.admin{
+  background:#fff3cd;
+  padding:15px;
+  border-radius:15px;
+  margin-top:20px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>🎬 Видео в презентации</h2>
+
+<div id="registration">
+<h3>Регистрация</h3>
+<input type="text" id="name" placeholder="Имя"><br><br>
+<input type="text" id="class" placeholder="Класс"><br><br>
+<button onclick="startTest()">Начать</button>
+</div>
+
+<div id="quiz" class="hidden">
+
+<div class="question">
+<h3>1️⃣ Выбери шаги вставки видео</h3>
+<img class="icon" src="https://img.icons8.com/color/96/video.png">
+<input type="checkbox" value="1"> Открыть нужный слайд<br>
+<input type="checkbox" value="1"> Нажать «Вставка»<br>
+<input type="checkbox" value="1"> Выбрать «Видео»<br>
+<input type="checkbox" value="0"> Вставить картинку<br>
+</div>
+
+<div class="question">
+<h3>2️⃣ Что нажать для добавления видео?</h3>
+<img class="icon" src="https://img.icons8.com/color/96/add.png">
+<input type="radio" name="q2" value="0"> Главная<br>
+<input type="radio" name="q2" value="2"> Вставка → Видео<br>
+<input type="radio" name="q2" value="0"> Дизайн<br>
+</div>
+
+<div class="question">
+<h3>3️⃣ Чтобы видео воспроизводилось?</h3>
+<img class="icon" src="https://img.icons8.com/color/96/play.png">
+<input type="radio" name="q3" value="2"> Вставить видео файл<br>
+<input type="radio" name="q3" value="0"> Добавить картинку<br>
+<input type="radio" name="q3" value="0"> Сохранить как изображение<br>
+</div>
+
+<div class="question">
+<h3>4️⃣ Что означает значок ▶ ?</h3>
+<img class="icon" src="https://img.icons8.com/color/96/circled-play.png">
+<input type="radio" name="q4" value="2"> Воспроизвести видео<br>
+<input type="radio" name="q4" value="0"> Удалить видео<br>
+</div>
+
+<button onclick="submitTest()">Отправить</button>
+</div>
+
+<div id="result"></div>
+
+<hr>
+
+<h3>🔐 Вход администратора</h3>
+<input type="password" id="adminPass" placeholder="Пароль">
+<button onclick="showAdmin()">Войти</button>
+
+<div id="adminPanel" class="admin hidden">
+<h3>📊 Результаты</h3>
+
+<select id="filterClass" onchange="loadResults()">
+<option value="all">Все классы</option>
+</select>
+
+<div id="resultsList"></div>
+
+<br>
+<button onclick="exportExcel()">📥 Скачать Excel</button>
+</div>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "ВАШ_API_KEY",
+  authDomain: "ВАШ_AUTH_DOMAIN",
+  projectId: "ВАШ_PROJECT_ID",
+  storageBucket: "ВАШ_STORAGE",
+  messagingSenderId: "ВАШ_SENDER",
+  appId: "ВАШ_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let allResults = [];
+
+window.startTest = function(){
+  document.getElementById("registration").classList.add("hidden");
+  document.getElementById("quiz").classList.remove("hidden");
+}
+
+window.submitTest = async function(){
+
+  let score = 0;
+
+  let checks = document.querySelectorAll("input[type=checkbox]:checked");
+  checks.forEach(c => score += parseInt(c.value));
+  score = (score === 3) ? 2 : 0;
+
+  score += parseInt(document.querySelector("input[name=q2]:checked")?.value || 0);
+  score += parseInt(document.querySelector("input[name=q3]:checked")?.value || 0);
+  score += parseInt(document.querySelector("input[name=q4]:checked")?.value || 0);
+
+  let student = {
+    name: document.getElementById("name").value,
+    class: document.getElementById("class").value,
+    score: score,
+    date: new Date().toLocaleString()
+  };
+
+  await addDoc(collection(db,"results"), student);
+
+  document.getElementById("quiz").classList.add("hidden");
+  document.getElementById("result").innerHTML =
+    `<h3>🎉 Твой результат: ${score} из 8 баллов</h3>`;
+}
+
+window.showAdmin = function(){
+  if(document.getElementById("adminPass").value === "admin123"){
+    document.getElementById("adminPanel").classList.remove("hidden");
+    loadResults();
+  } else alert("Неверный пароль");
+}
+
+async function loadResults(){
+  const snapshot = await getDocs(collection(db,"results"));
+  let list="";
+  let classes=new Set();
+  allResults=[];
+
+  snapshot.forEach(doc=>{
+    let data=doc.data();
+    allResults.push(data);
+    classes.add(data.class);
+
+    if(document.getElementById("filterClass").value==="all" ||
+       document.getElementById("filterClass").value===data.class){
+
+      list+=`<p><b>${data.name}</b> (${data.class}) — ${data.score} баллов</p>`;
+    }
+  });
+
+  document.getElementById("resultsList").innerHTML=list;
+
+  let select=document.getElementById("filterClass");
+  select.innerHTML='<option value="all">Все классы</option>';
+  classes.forEach(c=>{
+    select.innerHTML+=`<option value="${c}">${c}</option>`;
+  });
+}
+
+window.exportExcel=function(){
+  let worksheet = XLSX.utils.json_to_sheet(allResults);
+  let workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Результаты");
+  XLSX.writeFile(workbook, "Результаты_учеников.xlsx");
+}
+
+</script>
+
+</body>
+</html>
